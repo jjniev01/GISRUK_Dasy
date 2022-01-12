@@ -1,0 +1,58 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{R setup_functions, echo = FALSE, eval = TRUE, include = FALSE}
+##  Function to load and or install packages:
+package_prep <- function(...){
+  libs <- unlist(list(...))
+  ##  Check if the packages can be loaded and are already installed:
+  req <- unlist(lapply(libs, require, character.only = TRUE))
+  ##  Packages we need to install:
+  need <- libs[req = FALSE]
+  if (length(need) > 0) {
+    ##  Install the needed packages
+    install.packages(need)
+    ##  Load the just installed packages:
+    lapply(need, require,character.only = TRUE)
+  }
+}
+```
+
+```{R setup, echo = FALSE, eval = TRUE, include = FALSE}
+package_prep(c("raster","sf","devtools"))
+
+# devtools::install_github("wpgp/wpUtilities")
+# require(wpUtilities)
+
+```
+
+```{css, echo = FALSE}
+##  Make our code blocks scrollable
+pre {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+pre[class] {
+  max-height: 100px;
+}
+```
+
+
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
