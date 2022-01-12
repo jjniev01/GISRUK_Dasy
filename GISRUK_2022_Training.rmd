@@ -1,6 +1,20 @@
 ---
-title: "R Notebook"
-output: html_notebook
+title: "Dasymetric Mapping: An Introduction in R and Python"
+date: January 12, 2022
+author:
+  - Jeremiah J. Nieves, Geographic Data Science Lab - University of Liverpool
+  - Maksym Bondarenko, WorldPop - University of Southampton
+header-includes:
+  - \usepackage{amsmath}
+  
+bibliography: refs.bib
+output: 
+  pdf_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+  
+fontsize: 11pt
 ---
 
 
@@ -22,7 +36,7 @@ package_prep <- function(...){
 ```
 
 ```{R setup, echo = FALSE, eval = TRUE, include = FALSE}
-package_prep(c("raster","sf","devtools"))
+package_prep(c("raster","sf", "randomForest", "knitr", "here"))
 
 # devtools::install_github("wpgp/wpUtilities")
 # require(wpUtilities)
@@ -41,18 +55,225 @@ pre[class] {
 }
 ```
 
+# Overview
+In this `R`-based practical, we will explain what dasymetric disaggregation and modelling is. We will then proceed to walk through the basic procedures of dasymetrically modelling gridded population datasets, from census-based data, and some of the procedures to get the gridded population data ready for further uses. We will also briefly cover an "intelligent" dasymetric disaggregation which utilises machine learning to inform the redistribution of population into grids and explore potential ways of integrating other statistical modelling engines, various parameterisations, and niche applications.
+
+## Objectives
+ - Understand the differences between a "people per pixel" (ppp) and a "people per Hectare" (pph) gridded population dataset and acquire the skills to change between these population count (ppp) and population density (pph) datasets
+
+ - Learn about dasymetric disaggregation of count data and the use of "intelligent" dasymetric disaggregation as applied to gridded population modelling.
+ 
+## Prerequisites
+Basic literacy with computers with regards to folder and file navigation, unzipping compressed folders, and basic familiarity with R, such as running a command in the interactive window.
+
+# Preparation
+Open up the `../Practical_1/` folder and familiarize yourself with the structure and layout as the remainder of the instructions make reference to these folders and the files contained within them. Here the `..` refers to the directory where you have the unzipped workshop folder (`C:/Users/Jeremiah/Desktop/` in the example of Figure \ref{fig:file_structure}).
+
+```{R file_structure, echo = FALSE, fig.cap = "Example of file structure within the unzipped, supplied workshop folder."}
+knitr::include_graphics(here::here("Figures","figure1.png"))
+```
+ 
+ -	`../Practical_1/data/` contains the data we will be using throughout this exercise
+ 
+ -	`../Practical_1/output/` is where we will place our finalized, desirable output data
+ 
+ -	`../Practical_1/tmp/` is where we will place any intermediary files we have to make
+ 
+ -	`../Practical_1/src/` is for the advanced practical and can be ignored for this exercise
+ 
+ -	`../Practical_1/zipped_data.zip/` contains a compressed copy of the data in case you need to start over because somehow your original data became overwritten
 
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+We will go ahead and set the base folder path to the `GISRUK_2022_Training` folder and refer to it as `root`. For instance on my computer I set:
 
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
-
-```{r}
-plot(cars)
+    `root <- C:/Users/Jeremiah/Desktop/Practical_1/`
+```{R, root_set, eval = TRUE, echo = FALSE}
+##  This code block is for creating the document and shouldn't be run by folks in the workshop; feel free to modify for running the code blocks interactively in the notebook!
+root <- "E:/Workshops/Dasymetric Mapping/GISRUK_2022_Training/"
 ```
 
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
 
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+## Installing Packages
+We need to install the following packages prior to carrying out the practical exercise:
+ - **`raster`**
+ - **`sf`**
+ - **`randomForest`**
 
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+Type the following commands one at a time in the interactive window and hit `Enter` after each, waiting for each command to complete, i.e. the `>` symbol reappears in the interactive window. Or you can run them in the interactive code block below.
+
+```{R package_install, eval = FALSE, echo = TRUE}
+install.packages("raster")
+install.packages("sf")
+install.packages("randomForest")
+```
+
+From here on through the rest of the practical, you can either type the given commands in the interactive window, type them in a new script and running it line by line by highlighting each line and hitting `Ctrl+Enter`, or in the provided interactive code blocks within the R notebook (`.rmd`) document. The R Notebook (`GISRUK_2022_Training.rmd`) is available in the `../GISRUK_2022_Training/GISRUK_Dasy/` folder. Typing the commands in your own script will allow you to save the script for later reference and allow you to type comments by preceding your text with a `#`. 
+
+Once the packages have been successfully installed, load the packages:
+
+```{R, load_packages, eval = FALSE, echo = TRUE}
+library(raster)
+library(sf)
+library(randomForest)
+```
+
+# Understanding Gridded Population Datasets
+There are numerous gridded population datasets with global coverage that are produced. The [popgrid consortiuum](popgrid.org) is a collaborative group of such data producers. Leyk et al. (-@Leyk2019) gives a peer-reviewed assessment of many of these and talks about how each has different application purposes for which they are best suited. However, there are even more peer-reviewed gridded population datasets being produced every day, such as Palacios-Lopez *et al.* (-@Palcios-Lopez2022).
+
+Regardless of the method of production the format of most of these gridded data are either in a people per pixel (ppp) format, where each pixel represents the number of people in the pixel in an *unprojected* raster (i.e. latitude and longitude), or represents population density format, where each (typically) *projected* pixel represents the number of people for a given normalising area. 
+
+A commonly used gridded population dataset producer is [WorldPop](worldpop.org). They typically produce their datasets as ppp and people per hectare (pph), the latter being a population density measure.
+For instance, while not always the case, pph is  presented in pixels that have an area of a hectare (approximately a 100m x 100m pixel). However, there is nothing stopping a people per km density in a 100m x 100m pixel. Therefore it is very important that you understand how the data is made and what units are inferred on the values within your gridded dataset!
+
+Sticking with the WorldPop ppp and pph data example, these two datasets should look identical when opened in a GIS, but only because the density measure matches the resolution of the projected raster for pph. Again, the ppp datasets are *unprojected*, i.e. uses the wGS 84 geographic coordinate system and position is given in degrees of latitude and longitude. Conversely, the pph datasets are *projected* in an equal area coordinate system of meters from a specified origin, in most cases a Universal Transverse Mercator (UTM) projection, that is appropriate for the given country.
+
+We’ll explore some of these differences with some data from Rwanda (three-letter iso code of "RWA").
+
+## Spatial Characteristics of ppp and pph
+In the `../data/SectionI/` folder lies our example population data rasters. Add the `RWA_pph_2002_v2.tif` and the `RWA_ppp_2002_v2.tif` population rasters to environment using the following two commands:
+
+```{r, example_raster_load}
+ppp <- raster(paste0(root,"data/SectionI/RWA_ppp_2002_v2.tif"))
+pph <- raster(paste0(root,"data/SectionI/RWA_pph_2002_v2.tif"))
+```
+
+You can now view the raster datasets interactively if you type (one command at a time):
+
+```{r, ppp_pph_initial_plotting}
+plot(ppp)
+plot(pph)
+```
+
+We want some basic information regarding the two rasters we’ve loaded. We can get this by simply typing the variable name we assigned one of the rasters to and hitting `Enter` in the interactive window. For example, if I type `pph` and hit `Enter` I get the following output in the interactive window.
+
+```{r, base_raster_info_pph, echo = TRUE, eval = TRUE}
+pph
+```
+
+Similarly if you type `ppp` and hit `Enter` we'll get the following.
+
+```{r, base_raster_info_ppp, echo = TRUE, eval = TRUE}
+ppp
+```
+
+Notice how the coordinate reference systems (`coord. ref.`) are different and given in a standardized text format known as PROJ.4 (even if using the more updated PROJ.6 format). For the `ppp` dataset, it is the unprojected (meaning its units are in degrees of latitude and longitude) coordinate system WGS 1984. For the pph dataset, the coordinate reference system notes that it is in the datum of WGS 1984 (`+datum=WGS84`), but it is projected as a transverse Mercator (`+proj=tmerc`) whose origin latitude is +30° (`+lon_0=30`) and has units in meters (`+units=m`), that this dataset is a custom Universal Transverse Mercator (UTM) projection that lies between the “standard” UTM zones 35 and 36 (http://www.dmap.co.uk/utmworld.htm).
+
+Also given here is information regarding the spatial resolution (resolution), the area size on the ground each pixel represents, of the rasters. We can see the ppp data has a value of (`0.0008333`,`0.0008333`) for the x and y-axes and similarly the `pph` dataset has (`100`,`100`). These values are the length and width of each pixel in the units of their coord. ref., meaning the ppp dataset has pixels with area equal to 0.0008333° x 0.0008333° and the `pph` dataset has pixels with area equal to 100m x 100x (0.1km sq also known as a “hectare”).
+
+These differences have some implication for users. Because WGS 1984 is a spherical representation of the surface of Earth, one degree of latitude becomes smaller the further away you move from the Equator. This means that the southernmost pixel in the Rwanda ppp population dataset represents and area smaller than the northernmost pixel in the same dataset! The reverse is true for datasets north of the Equator. The pixels of the `ppp` (0.0008333°) and `pph` (100m) datasets represent approximately the same area at the Equator. Within a given dataset, the issue of unprojected pixels representing smaller areas the further from the Equator is a relatively larger problem for countries that cover a wide range of latitudes, Chile for example, if we were to calculate population densities directly from the `ppp` dataset without accounting for the above issues.
+
+## Proper Resampling and Aggregating of pph
+Let’s say you wish to have the pph population density data have a different population density per unit area to match other data, for example people per sq. km, but still have every pixel be 100m x 100m. This is a simple algebraic unit conversion. Let’s say we had a pixel with a value of 5.5 people per hectare and wanted to know the equivalent in sq. km. Given that one hectare is 0.1 sq km we use the equation:
+
+\[
+\text{people per km}^2 = (5.5 \text{ people})/(1 \text{ hectare}) * (1 \text{ hectare})/(0.01 \text{ km}^2)
+\]
+
+The second element of the equation is what is known as a _conversion factor_. Thankfully, `R` and the **`raster`** package allow for super simple commands for doing this sort of “Raster Math” across every pixel in the raster at once. Type and execute the following command:
+
+```{r, pph_to_ppk}
+ppk <- pph / 0.01
+```
+
+Simple, right? Let’s see how the values changed by typing and executing the following commands in order to compare the two raster’s distribution of values. Here we’ll create two overlapping density curves (similar to histograms) of the `pph`, in blue, and the `ppk` data, in red.
+
+```{r, pph_ppk_density}
+plot(density(pph[], na.rm = TRUE), col = "blue")
+lines(density(ppk[], na.rm = TRUE), col = "red")
+```
+
+or by calling the two rasters themselves to look at their range of values.
+
+```{r, pph_ppk_range}
+pph
+ppk
+```
+
+We can see that the values shifted in scale to much larger ones in the `ppk` data (by a factor of 100). Additionally, this served to spread the distribution of the `pph` values across a larger range in the `ppk` data, which is reflected in the *almost* flat red line of the density plots.The red curve appears flat only because of the scale of the plot, but is actually has a slight convex curve with a local maximum around 220 on the x-axis. The pixels are still only 100m x 100m (0.01 sq km), but the units of population density in the `ppk` data are different.
+
+This approach can be used to convert to any area unit desired for the population density; all that is needed is the correct conversion factor.
+
+But what if you need to have your population density data at a coarser resolution to match another dataset? Let’s say you have some data on urban extents at 1 sq. km resolution and need to have your population density information at the same spatial resolution. Here we can use the `R` function `aggregate()`. This function takes your original raster and aggregates the pixels into larger pixels using a specified mathematical function to aggregate the many values into 1 value per new, larger pixel. Type and execute `?raster::aggregate` in the interactive window for more function information.
+
+Let's aggregate the `pph` data into pixels that are actually 1 sq. km in resolution.
+
+```{r, aggregate_1k}
+pph_1k <- aggregate(pph, fact=10, fun=mean, expand=T, na.rm=T)
+```
+
+Visually compare the `pph` raster and the `pph_1k` raster by using the plot function.
+
+```{r, pph_1k_comparison}
+plot(pph)
+plot(pph_1k)
+```
+
+You should now have a data set with a spatial resolution/cell size of 1000m x 1000m (check the layer properties to ensure). What are the units of this new raster’s values though? Because we had `R` take the average or mean of the input data (`pph`), every pixel in the output dataset represents the average (notice the `fun = "mean"` parameter in the above code block) people per hectare of the input cells. If you desired people per sq. km at 1 sq. km resolution, then the conversion procedure would also need to be done either prior to aggregation.
+
+Note: Be aware of the modifiable areal unit problem (MAUP) when aggregating. See Openshaw (-@Openshaw1984) for more information.
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Alternatively, you can resample to change the resolution of the data, although there are serious caveats with this if you resample to a smaller spatial resolution since that would be disaggregating without any corresponding finer scale information, as with dasymetric disaggregation (See Section 4), and therefore committing an _ecological fallacy_.
+
+Let’s say you need to resample to ~300m resolution to match some projected European Space Agency Climate Change Initiative land cover data. We will use the `resample()` function from the raster package to do this. Deciding what resampling method to use, bilinear or bicubic, is based upon use and preference. See [here](http://desktop.arcgis.com/en/arcmap/latest/extensions/spatial-analyst/performing-analysis/cell-size-and-resampling-in-analysis.htm) for a visual description of how the resampling methods work. Because our data are continuous we will use bilinear interpolation.
+
+R prefers to have a raster that already has the desired resolution to use as a “template” for converting your input dataset. In this scenario we can just give it the landcover dataset.
+
+Type and execute the following to load the landcover raster:
+
+```{r, lc_loading}
+rwa_lc_300 <- raster(paste0(root, "data/SectionI/rwa_lc_300_projected.tif"))
+```
+
+Then type and execute the following to carry out the resample:
+```{r, lc_resample}
+pph_300m <- resample(pph, rwa_lc_300, method="bilinear")
+```
+
+Use the plot function to see how the results carried out.
+
+```{r, lc_resample_plot}
+plot(pph_300m)
+```
+
+Take caution, if you do any of the above with the population count data, once you have aggregated, using `fun="sum"`, or by resampling, they will no longer add back up to the population total of the census-based unit they were disaggregated from! That eliminates a key advantage and property of dasymetric mapping -- its "volume preserving" characteristic.
+
+##  Going from ppp to Spatially Projected Population Density
+So, we've seen how to do some manipulations with the pph-formatted data. But what if we have unprojected ppp-formatted data and we want to acqurie gridded population data where our values correspond to some populaiton density?
+
+The key is the pixel area grid dataset that is provided with this dataset. The pixel area raster is a 0.0008333° resolution dataset whose pixel values represent the area of a given pixel in square meters. This means that if we have the spatially aligned ppp dataset, it becomes another simple algebra problem using raster math where:
+
+\[
+\text{population density in pixel }i = (\text{population count}_i)/(\text{pixel area}_i)
+\]
+
+First we need to get a raster where each pixel contains the value of the its area in some squared linear units. Thankfully, the **`raster`** package already has a convenient function for this: `area()` (Although it is not suitable for _super precise_ applications; see `?area` for more details). The units the `area()` function return are in sq. km. So, let's load a ppp dataset for Rwanda (RWA) and calculate the pixel area (`px_area`):
+
+```{r, ppp_area_calc}
+ppp_rwa <- raster(paste0(root,"data/SectionI/ppp_prj_2002_RWA.tif"))
+px_area <- area(ppp_rwa)
+```
+
+We could then get the population density per sq. km, in approx 100m x 100m pixels, by simply dividing the `ppp_rwa` by `px_area`. But, let's say we want to conver this `ppp` dataset to have density units of people per sq. mile (mi). For this we'd need a conversion factor of 1 sq. km to 0.386102 sq. mi. Equation wise it'd look like:
+
+\[
+\text{ppmi} = \text{ppp_rwa}/\text{px_area}_{km^2} * (1 \text{ km}^2/0.386102\text{ mi}^2)
+\]
+
+We could then execute the following:
+
+```{r, ppp_to_sq_mi}
+ppmi <- ppp_rwa/px_area * (1/0.386102)
+```
+
+You should now have a population density layer, in WGS 1984 coordinate system still, with units of people per square mile. If you desired another area unit for the density value, you could use the same equation above and modify it by simply multiplying by the correct conversion factor. Feel free to explore this dataset as before with plotting and other graphs.
+
+
+# "Intelligent" Dasymetric Redistirbution 
+##  What is Dasymetric Redistribution?
+
+
+##  What is a Random Forest?
+
+##  Dasymetric Disaggregation with a Random Forest-informed Weighting Layer
