@@ -36,7 +36,7 @@ package_prep <- function(...){
 ```
 
 ```{R setup, echo = FALSE, eval = TRUE, include = FALSE}
-package_prep(c("raster","sf", "randomForest", "dplyr", "knitr", "here","readr","stringr","kableExtra"))
+package_prep(c("raster","sf", "randomForest","fasterize", "dplyr", "knitr", "here","readr","stringr","kableExtra"))
 
 # devtools::install_github("wpgp/wpUtilities")
 # require(wpUtilities)
