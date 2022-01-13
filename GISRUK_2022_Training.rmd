@@ -1,9 +1,9 @@
 ---
-title: "Dasymetric Mapping: An Introduction in R and Python"
+title: "Dasymetric Mapping: An Introduction in R"
 date: January 12, 2022
 author:
   - Jeremiah J. Nieves, Geographic Data Science Lab - University of Liverpool
-  - Maksym Bondarenko, WorldPop - University of Southampton
+
 header-includes:
   - \usepackage{amsmath}
   
@@ -83,13 +83,13 @@ In this \proglang{R}-based practical, we will explain what dasymetric disaggrega
 Basic literacy with computers with regards to folder and file navigation, unzipping compressed folders, and basic familiarity with R, such as running a command in the interactive window.
 
 # Preparation
-Open up the `../Practical_1/` folder and familiarize yourself with the structure and layout as the remainder of the instructions make reference to these folders and the files contained within them. Here the `..` refers to the directory where you have the unzipped workshop folder (`C:/Users/Jeremiah/Desktop/` in the example of Figure \ref{fig:filestructure}).
+Open up the `../Practical_1/` folder and familiarize yourself with the structure and layout as the remainder of the instructions make reference to these folders and the files contained within them. Here the `..` refers to the directory where you have the unzipped workshop folder (`C:/Users/Jeremiah/Desktop/` in the example of Figure 1).
 
 ```{r filestructure, echo = FALSE, fig.cap = "Example of file structure within the unzipped, supplied workshop folder."}
 knitr::include_graphics(here::here("Figures","figure1.png"))
 ```
  
- \newpage
+\newpage
  
  -	`../Practical_1/data/` contains the data we will be using throughout this exercise
  -	`../Practical_1/output/` is where we will place our finalized, desirable output data
@@ -160,6 +160,8 @@ ppp <- raster(paste0(root,"data/SectionI/RWA_ppp_2002_v2.tif"))
 pph <- raster(paste0(root,"data/SectionI/RWA_pph_2002_v2.tif"))
 ```
 
+\newpage
+
 You can now view the raster datasets interactively if you type (one command at a time):
 
 ```{r ppp_pph_initial_plotting, size = "small"}
@@ -168,6 +170,8 @@ plot(pph)
 ```
 
 We want some basic information regarding the two rasters we’ve loaded. We can get this by simply typing the variable name we assigned one of the rasters to and hitting `Enter` in the interactive window. For example, if I type `pph` and hit `Enter` I get the following output in the interactive window.
+
+\newpage
 
 ```{r base_raster_info_pph, echo = TRUE, eval = TRUE, size = "small"}
 pph
@@ -203,6 +207,8 @@ plot(density(pph[], na.rm = TRUE), col = "blue")
 lines(density(ppk[], na.rm = TRUE), col = "red")
 ```
 
+\newpage
+
 or by calling the two rasters themselves to look at their range of values.
 
 ```{r, pph_ppk_range, size = "small"}
@@ -221,6 +227,8 @@ Let's aggregate the `pph` data into pixels that are actually 1 sq. km in resolut
 ```{r, aggregate_1k, size = "small"}
 pph_1k <- aggregate(pph, fact = 10, fun = mean, expand = T, na.rm = TRUE)
 ```
+
+\newpage
 
 Visually compare the `pph` raster and the `pph_1k` raster by using the plot function.
 
@@ -286,28 +294,31 @@ ppmi <- ppp_rwa/px_area * (1/0.386102)
 
 You should now have a population density layer, in WGS 1984 coordinate system still, with units of people per square mile. If you desired another area unit for the density value, you could use the same equation above and modify it by simply multiplying by the correct conversion factor. Feel free to explore this dataset as before with plotting and other graphs.
 
+\newpage
 
 # "Intelligent" Dasymetric Redistirbution 
 ## What is Dasymetric Redistribution?
-Dasymetric redistribution is the disaggregation of values from count data a larger _source area_ to a series of, smaller, _target areas_ that lie within the given source area based upon _ancillary data_. Ancillary data is information related to the phenomena, which is being disaggregated, and is used to inform, proportionally, which target units the counts being distributed should be assigned [@Wright1936; @Eicher2001; @Mennis2003; @Mennis2006; @Mennis2009]. The ancillary data must be at the same spatial resolution of the target areas and the disaggregated values assigned to the target areas should add back up to the original value of the source area they were distributed from [@Mennis2003; @Mennis2006; @Mennis2009]. This is similar to the more simple procedure of areal reweighting (Figure \ref{fig:arealfig}) which redistributes count values based upon the proportional relationships between the areas of the targets to the source [@Eicher2001].
+Dasymetric redistribution is the disaggregation of values from count data a larger _source area_ to a series of, smaller, _target areas_ that lie within the given source area based upon _ancillary data_. Ancillary data is information related to the phenomena, which is being disaggregated, and is used to inform, proportionally, which target units the counts being distributed should be assigned [@Wright1936; @Eicher2001; @Mennis2003; @Mennis2006; @Mennis2009]. The ancillary data must be at the same spatial resolution of the target areas and the disaggregated values assigned to the target areas should add back up to the original value of the source area they were distributed from [@Mennis2003; @Mennis2006; @Mennis2009]. This is similar to the more simple procedure of areal reweighting (Figure 2) which redistributes count values based upon the proportional relationships between the areas of the targets to the source [@Eicher2001].
 
 ```{R arealfig, echo = FALSE, fig.cap = "Example of areal reweighting. Adapted from Nieves et al. (2022) DOI: 10.13140/RG.2.2.24822.93763."}
 knitr::include_graphics(here::here("Figures","figure2.png"))
 ```
 
-For instance, if we are disaggregating population counts from a county down to the admin units that make up the county, we could use land cover as an ancillary dataset, as shown in an example within Figure \ref{fig:dasy_fig}. This is because we know, or assume, things about the relationship between population counts and land cover, e.g. few to no people live in water (land cover class "200" in example), more people live in built land cover (land cover class "190" in example) than in agriculture land cover (land cover class "11" in example), and more people are likely to live in agriculture land cover than forest land cover (land cover class "40" in example) [@Mennis2003; @Mennis2006; @Nieves2017].
+For instance, if we are disaggregating population counts from a county down to the admin units that make up the county, we could use land cover as an ancillary dataset, as shown in an example within Figure 3. This is because we know, or assume, things about the relationship between population counts and land cover, e.g. few to no people live in water (land cover class "200" in example), more people live in built land cover (land cover class "190" in example) than in agriculture land cover (land cover class "11" in example), and more people are likely to live in agriculture land cover than forest land cover (land cover class "40" in example) [@Mennis2003; @Mennis2006; @Nieves2017].
 
 ```{R dasyfig, echo = FALSE, fig.cap = "Example of dasymetric disaggregation, specifically an \"intelligent\" version where the weights were determined by a linear regression. Adapted from Nieves et al. (2022) DOI: 10.13140/RG.2.2.24822.93763."}
 knitr::include_graphics(here::here("Figures","figure3.png"))
 ```
 
-How we go about communicating this relationship mathematically is by assigning weights to the different ancillary data. This can either be done by manually assigning weights based upon expertise or theoretical concepts [@Mennis2003], or so-called “intelligent” dasymetric mapping [@Mennis2006] where the weights are determined by some statistical function or model such as linear regression (Figure \ref{fig:dasy_fig}). It is important to note that these weights are used relative to each source area. So, if a target area has a given weight, we first normalize it, if the weights in the source area do not already add up to 1, relative to all the other target areas within its source area prior to multiplying the source area count by the weights to get the final disaggregated target area counts (Figure \ref{fig:dasyfig}).
+How we go about communicating this relationship mathematically is by assigning weights to the different ancillary data. This can either be done by manually assigning weights based upon expertise or theoretical concepts [@Mennis2003], or so-called “intelligent” dasymetric mapping [@Mennis2006] where the weights are determined by some statistical function or model such as linear regression (Figure 3). It is important to note that these weights are used relative to each source area. So, if a target area has a given weight, we first normalize it, if the weights in the source area do not already add up to 1, relative to all the other target areas within its source area prior to multiplying the source area count by the weights to get the final disaggregated target area counts (Figure 3).
+
+\newpage
 
 We are going to examine a method of random forest-informed dasymetric modelling of gridded population data, put forth by Stevens *et al.* [-@Stevens2015] that uses a random forest regression, a regression tree-based machine learning method, to create the weights that inform the dasymetric redistribution of population count values from source areas (typically census-based enumeration units) to our target areas (approximately 100m resolution pixels).
 
 ##  What is a Random Forest?
 
-Random forests (RFs) are a non-parametric modelling method that creates an ensemble model by growing many independent decision trees through random covariate selection and a sampling with replacement method called bagging [@Breiman1996; @Breiman2001]. As related to user input and parametrization, RFs do not require much, which is an attractive feature and allows it to be used on large datasets with varying attributes. A brief summary of strengths and weaknesses of RFs are presented in table \ref{tab:rf-tbl}:
+Random forests (RFs) are a non-parametric modelling method that creates an ensemble model by growing many independent decision trees through random covariate selection and a sampling with replacement method called bagging [@Breiman1996; @Breiman2001]. As related to user input and parametrization, RFs do not require much, which is an attractive feature and allows it to be used on large datasets with varying attributes. A brief summary of strengths and weaknesses of RFs are presented in Table \ref{tab:rf-tbl}:
 
 ```{r rf-tbl, echo = FALSE, warning = FALSE, message = FALSE}
 options(knitr.kable.NA = '')
@@ -332,9 +343,13 @@ knitr::kable(tbl_df, caption = "General strengths and limits of random forests",
 
 While fully understanding a RF is not necessary to utilize this data correctly, those who wish to know more can read [@Breiman1996; @Breiman2001; @Liaw2002] and the document `Classifiers and Random Forests.pdf` in the `../docs/` folder. The important concept is that we use random forests to create the weighting layer used in our dasymetric redistribution of population count data by training it at the admin unit level using unit averages of covariates and population density and then predict population density per pixel based upon pixel level covariates.
 
+\newpage
+
 ##  Dasymetric Disaggregation with a Random Forest-informed Weighting Layer
 
-Here we will provide you with the weighting layer created by a RF and have you manually go through the process of disaggregating population count data from vector-based administrative units to ~100m pixels. Let’s start by adding our vector-based population data that is stored as a polygon shapefile. Execute the following:
+Here we will provide you with the weighting layer created by a RF and have you manually go through the process of disaggregating population count data from vector-based administrative units to ~100m pixels. Let’s start by adding our vector-based population data that is stored as a polygon shapefile. 
+
+Execute the following:
 
 ```{r, load_shapefile, size = "small"}
 pop_shp <- st_read(dsn = paste0(root,"data/SectionII/adminpop.shp"),
@@ -358,6 +373,8 @@ rf_weight_layer <- raster(paste0(root,
                                  "predict_density_rf_pred_prj_2002_RWA.tif"))
 ```
 
+\newpage
+
 Get an idea of the what the weighting layer looks like by calling:
 
 ```{r, plot_rf_weights, size = "small"}
@@ -371,6 +388,8 @@ Lets focus on normalising the weights relative to each unit. We can think of thi
 $$\text{normalised weight}_{ij} = \frac{RF\_predicted\_value_{ij}}{\sum{RF\_predicted\_value_{ij}}}$$
 
 So, to get our normalised weighting layer we need to do two things: 1) find the sum of all pixel values within each source area of the `.shp` layer, and, 2) Divide all the pixel values of the `.tif` weighting raster by those sums. First, we’ll find the sum of weight values and create a raster of those sums that we can normalise by. So, we would normally create a raster of zones to carry out our sum procedure within by calling the `rasterize()` function from the raster package to put the ADMINID values into spatially coincident raster cells. However, the `rasterize()` function is relatively inefficient, so we will use the more efficient `fasterize()` function that can leverage some of the greater efficiencies of the \pkg{sf} package.
+
+\newpage
 
 ```{r, fasterise_polygon, size = "small"}
 zone_ras <- fasterize(pop_shp,
@@ -431,6 +450,8 @@ weight_sum_ras <- fasterize(pop_shp,
                             background = NA)
 ```
 
+\newpage
+
 Go ahead and plot the raster to see how it did.
 
 ```{r, plot_weight_sum_raster, size = "small"}
@@ -452,6 +473,8 @@ pop_sum_ras <- fasterize(pop_shp,
                          fun = "first",
                          background = NA)
 ```
+
+\newpage
 
 Give this raster a plot to see how coarse the population data is relative to what we are about to do.
 
@@ -495,33 +518,9 @@ lc_ras <- raster(paste0(root,"data/SectionII/rwa_lc.tif"))
 plot(lc_ras)
 ```
 
-This raster is a thematic land cover dataset where every integer value represents one of the described land cover classes in the table below (Table \ref{tab:lc-tbl}). There are more classes possible in this dataset, but we only include the ones seen in Rwanda for conciseness.
+This raster is a thematic land cover dataset where every integer value represents one of the described land cover classes in the table below (Table 2). There are more classes possible in this dataset, but we only include the ones seen in Rwanda for conciseness.
 
-```{r lc-weight-tbl, echo = FALSE, warning = FALSE, message = FALSE}
-options(knitr.kable.NA = '')
-tbl <- "|Class Number|Land Cover Description| \\n
-| --------------------- | ---------- | \\n
-|11|Cultivated and Managed Lands| \\n
-|40|Natural and Semi-Natural Vegetation: Woody/Trees| \\n
-|130|Natural and Semi-Natural Vegetation: Shrubs| \\n
-|140|Natural and Semi-Natural Vegetation: Herbaceous/Grassy| \\n
-|160|Natural and Semi-Natural Vegetation: Aquatic| \\n
-|190|Built Areas: Urban| \\n
-|200|Bare Areas| \\n
-|210|Water| \\n
-|240|Built Areas: Rural| \\n" 
-tbl_df <- data_frame <- read_delim(tbl, delim = '|', show_col_types = FALSE) %>%
-  select(`Class Number`, `Land Cover Description`)
-tbl_df <- tbl_df[c(2:nrow(tbl_df)),]
-knitr::kable(tbl_df, caption = "ESA CCI Land Cover classes and descriptions", booktabs = TRUE) %>%
-  kable_classic(font_size = 10, full_width = FALSE, html_font = "Cambria") %>%
-  column_spec(1, width = "15mm") %>%
-  column_spec(2, width = "75mm")
-```
-
-To turn this into a weighting layer, we first need to convert the land cover class values into weights. The catch is, with the `reclass()` function, we can only convert from one integer value to another integer value, so keep this in mind when selecting weights.
-
-Using the table below to record your choices, assign weighting values at your discretion based upon your beliefs of how population distribution is related to land cover classes. But remember that these values should have relative meaning amongst themselves. For instance, you may have reason to believe that water land cover (class 200) has zero population so you would want to give it a weight of “0”. You also may believe that people are five times as likely to live in built land cover (class 190) as compared to cultivated land cover (class 11) and twice as likely to live in cultivated land cover (class 11) as they are to live in forested land cover (class 40). Understanding that the lowest non-zero weight you can assign is “1”, you could then assign weights of 10, 2, and 1 to built, cultivated, and forest land cover, respectively.
+\newpage
 
 ```{r lc-weight-tbl_apriori, echo = FALSE, warning = FALSE, message = FALSE}
 options(knitr.kable.NA = '')
@@ -546,6 +545,10 @@ knitr::kable(tbl_df, caption = "ESA CCI Land Cover classes, descriptions, and us
   column_spec(3, width = "25mm")
 ```
 
+To turn this into a weighting layer, we first need to convert the land cover class values into weights. The catch is, with the `reclass()` function, we can only convert from one integer value to another integer value, so keep this in mind when selecting weights.
+
+Using the "User Assigned Weights" column in Table 2 to record your choices, assign weighting values at your discretion based upon your beliefs of how population distribution is related to land cover classes. But remember that these values should have relative meaning amongst themselves. For instance, you may have reason to believe that water land cover (class 200) has zero population so you would want to give it a weight of “0”. You also may believe that people are five times as likely to live in built land cover (class 190) as compared to cultivated land cover (class 11) and twice as likely to live in cultivated land cover (class 11) as they are to live in forested land cover (class 40). Understanding that the lowest non-zero weight you can assign is “1”, you could then assign weights of 10, 2, and 1 to built, cultivated, and forest land cover, respectively.
+
 Now that you have decided the weights you desire to use, we are going to create our initial weighting layer. We need to first create our reclassification matrix. A reclassification matrix has three columns: 1) the “from” column, 2) the “to” column and, 3), the “becomes” column. The first two columns define the class number you want to designate, and the third column indicates the value you want that range of values to become. I’ve filled in the first two columns of values in the code below and now you just need to fill in your selected weight values for the third column, where every `x` I’ve placed should be replaced with your chosen weight. Class numbers in the code are in the same order as the above table (Table \ref{tab:rf_weight-tbl}. NOTE: The sum of your weights should add to $1.0$!
 
 ```{r, reclassification_matrix, eval = FALSE, echo = TRUE, size = "small"}
@@ -561,6 +564,9 @@ rcl_mat <- matrix(data = c(c(9,39,129,139,159,189,199,209,239),
                            c(0.04,0.06,0.02,0.03,0.0,0.65,0.01,0.0,0.19)),
                   ncol = 3)
 ```
+
+\newpage
+
 Now we can reclassify to get our weights raster by running the following:
 
 ```{r, reclassify_lc, size = "small"}
@@ -615,7 +621,9 @@ weight_sum_ras <- fasterize(pop_shp,
                             background = NA)
 ```
 
-Normalise our landcover based weights:
+\newpage
+
+Normalise our land cover based weights:
 
 ```{r, normalise_weights_2, size = "small"}
 lc_norm_weights <- lc_weight_ras / weight_sum_ras
@@ -640,6 +648,8 @@ plot(lc_disagg)
 
 Take a minute to plot and explore your dasymetrically redistributed population surface! Or save the `lc_disagg` object to a file (using the earlier `writeRaster` command) and open it up Arcmap/QGIS for an interactive exploration. If you desire, you can perform the aggregation check to make sure your population count sums up properly. Additionally, you can take the `RWA_ppp_manual_2002.tif` and `RWA_ppp_LC_manual_2002.tif` and subtract them using Raster Calculator type operations to examine how each disaggregation distributed the population counts differently.
 
+\newpage
+
 # Further Steps
 
 Now that you have the basics of how to create and post-process these types of data, try exploring other implementations of dasymetric disaggregation. Some things to possibly explore:
@@ -650,9 +660,8 @@ Now that you have the basics of how to create and post-process these types of da
 
 - Find some census-based data at two different spatial resolutions, e.g. census tracts (admin. level 3), block groups (admin. level 4), and blocks (admin. level 5) from the US census Bureau. Model gridded population by creating your weights using the coarser data (e.g. admin level 3 and 4) and then use the boundaries and counts of the spatially finest data (admin level 5) to compare the errors that get introduced by modelling with different coarsenesses of input data. Note: good error measures for this are the mean absolute error (MAE) and the root mean square error (RMSE), but it is better to calculate them using population density rather than counts as the former adjusts for the area of each admin unit. See Gaughan *et al.* [-@Gaughan2014], Reed *et al.* [-@Reed2018], and Stevens *et al.* [-@Stevens2020] for more details of looking at the errors of modelled population.
 
-- Explore the \pkg{popRF} package vignette to see how you can quickly and easily construct your own random forest-informed gridded population datasets with an open online geospatial data library as well as your own input data
+- Explore the [\pkg{popRF} package vignette](http://dx.doi.org/10.13140/RG.2.2.24822.93763) to see how you can quickly and easily construct your own random forest-informed gridded population datasets with an open online geospatial data library as well as your own input data
 
-
-
+\newpage
 
 # References
