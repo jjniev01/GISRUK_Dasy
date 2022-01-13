@@ -36,12 +36,16 @@ package_prep <- function(...){
 ```
 
 ```{R setup, echo = FALSE, eval = TRUE, include = FALSE}
-package_prep(c("raster","sf", "randomForest", "knitr", "here"))
+package_prep(c("raster","sf", "randomForest", "dplyr", "knitr", "here","readr","stringr","kableExtra"))
 
 # devtools::install_github("wpgp/wpUtilities")
 # require(wpUtilities)
 
 ```
+
+\newcommand{\pkg}[1]{{\normalfont\fontseries{b}\selectfont #1}}
+\let\proglang=\textsf
+\let\code=\texttt
 
 ```{css, echo = FALSE}
 ##  Make our code blocks scrollable
@@ -56,7 +60,7 @@ pre[class] {
 ```
 
 # Overview
-In this `R`-based practical, we will explain what dasymetric disaggregation and modelling is. We will then proceed to walk through the basic procedures of dasymetrically modelling gridded population datasets, from census-based data, and some of the procedures to get the gridded population data ready for further uses. We will also briefly cover an "intelligent" dasymetric disaggregation which utilises machine learning to inform the redistribution of population into grids and explore potential ways of integrating other statistical modelling engines, various parameterisations, and niche applications.
+In this \proglang{R}-based practical, we will explain what dasymetric disaggregation and modelling is. We will then proceed to walk through the basic procedures of dasymetrically modelling gridded population datasets, from census-based data, and some of the procedures to get the gridded population data ready for further uses. We will also briefly cover an "intelligent" dasymetric disaggregation which utilises machine learning to inform the redistribution of population into grids and explore potential ways of integrating other statistical modelling engines, various parameterisations, and niche applications.
 
 ## Objectives
  - Understand the differences between a "people per pixel" (ppp) and a "people per Hectare" (pph) gridded population dataset and acquire the skills to change between these population count (ppp) and population density (pph) datasets
@@ -74,19 +78,16 @@ knitr::include_graphics(here::here("Figures","figure1.png"))
 ```
  
  -	`../Practical_1/data/` contains the data we will be using throughout this exercise
- 
  -	`../Practical_1/output/` is where we will place our finalized, desirable output data
- 
  -	`../Practical_1/tmp/` is where we will place any intermediary files we have to make
- 
  -	`../Practical_1/src/` is for the advanced practical and can be ignored for this exercise
- 
  -	`../Practical_1/zipped_data.zip/` contains a compressed copy of the data in case you need to start over because somehow your original data became overwritten
 
 
 We will go ahead and set the base folder path to the `GISRUK_2022_Training` folder and refer to it as `root`. For instance on my computer I set:
 
     `root <- C:/Users/Jeremiah/Desktop/Practical_1/`
+    
 ```{R, root_set, eval = TRUE, echo = FALSE}
 ##  This code block is for creating the document and shouldn't be run by folks in the workshop; feel free to modify for running the code blocks interactively in the notebook!
 root <- "E:/Workshops/Dasymetric Mapping/GISRUK_2022_Training/"
@@ -95,10 +96,13 @@ root <- "E:/Workshops/Dasymetric Mapping/GISRUK_2022_Training/"
 
 ## Installing Packages
 We need to install the following packages prior to carrying out the practical exercise:
- - **`raster`**
- - **`sf`**
- - **`randomForest`**
-
+ 
+- \pkg{raster}
+- \pkg{sf}
+- \pkg{randomForest}
+- \pkg{dplyr}
+- \pkg{fasterize}
+ 
 
 Type the following commands one at a time in the interactive window and hit `Enter` after each, waiting for each command to complete, i.e. the `>` symbol reappears in the interactive window. Or you can run them in the interactive code block below.
 
@@ -106,6 +110,8 @@ Type the following commands one at a time in the interactive window and hit `Ent
 install.packages("raster")
 install.packages("sf")
 install.packages("randomForest")
+install.packages("dplyr")
+install.packages("fasterize")
 ```
 
 From here on through the rest of the practical, you can either type the given commands in the interactive window, type them in a new script and running it line by line by highlighting each line and hitting `Ctrl+Enter`, or in the provided interactive code blocks within the R notebook (`.rmd`) document. The R Notebook (`GISRUK_2022_Training.rmd`) is available in the `../GISRUK_2022_Training/GISRUK_Dasy/` folder. Typing the commands in your own script will allow you to save the script for later reference and allow you to type comments by preceding your text with a `#`. 
@@ -116,6 +122,8 @@ Once the packages have been successfully installed, load the packages:
 library(raster)
 library(sf)
 library(randomForest)
+library(dplyr)
+library(fasterize)
 ```
 
 # Understanding Gridded Population Datasets
@@ -164,13 +172,11 @@ Also given here is information regarding the spatial resolution (resolution), th
 These differences have some implication for users. Because WGS 1984 is a spherical representation of the surface of Earth, one degree of latitude becomes smaller the further away you move from the Equator. This means that the southernmost pixel in the Rwanda ppp population dataset represents and area smaller than the northernmost pixel in the same dataset! The reverse is true for datasets north of the Equator. The pixels of the `ppp` (0.0008333°) and `pph` (100m) datasets represent approximately the same area at the Equator. Within a given dataset, the issue of unprojected pixels representing smaller areas the further from the Equator is a relatively larger problem for countries that cover a wide range of latitudes, Chile for example, if we were to calculate population densities directly from the `ppp` dataset without accounting for the above issues.
 
 ## Proper Resampling and Aggregating of pph
-Let’s say you wish to have the pph population density data have a different population density per unit area to match other data, for example people per sq. km, but still have every pixel be 100m x 100m. This is a simple algebraic unit conversion. Let’s say we had a pixel with a value of 5.5 people per hectare and wanted to know the equivalent in sq. km. Given that one hectare is 0.1 sq km we use the equation:
+Let’s say you wish to have the pph population density data have a different population density per unit area to match other data, for example people per sq. km, but still have every pixel be 100m x 100m. This is a simple algebraic unit conversion. Let’s say we had a pixel with a value of 5.5 people per hectare and wanted to know the equivalent in sq. km. Given that one hectare is 0.01 sq km we use the equation:
 
-\[
-\text{people per km}^2 = (5.5 \text{ people})/(1 \text{ hectare}) * (1 \text{ hectare})/(0.01 \text{ km}^2)
-\]
+$$\text{people per km}^2 = \frac{5.5 \text{ people}}{1 \text{ hectare}} * \frac{1 \text{ hectare}}{0.01 \text{ km}^2}$$
 
-The second element of the equation is what is known as a _conversion factor_. Thankfully, `R` and the **`raster`** package allow for super simple commands for doing this sort of “Raster Math” across every pixel in the raster at once. Type and execute the following command:
+The second element of the equation is what is known as a _conversion factor_. Thankfully, \proglang{R} and the **`raster`** package allow for super simple commands for doing this sort of “Raster Math” across every pixel in the raster at once. Type and execute the following command:
 
 ```{r, pph_to_ppk}
 ppk <- pph / 0.01
@@ -194,12 +200,12 @@ We can see that the values shifted in scale to much larger ones in the `ppk` dat
 
 This approach can be used to convert to any area unit desired for the population density; all that is needed is the correct conversion factor.
 
-But what if you need to have your population density data at a coarser resolution to match another dataset? Let’s say you have some data on urban extents at 1 sq. km resolution and need to have your population density information at the same spatial resolution. Here we can use the `R` function `aggregate()`. This function takes your original raster and aggregates the pixels into larger pixels using a specified mathematical function to aggregate the many values into 1 value per new, larger pixel. Type and execute `?raster::aggregate` in the interactive window for more function information.
+But what if you need to have your population density data at a coarser resolution to match another dataset? Let’s say you have some data on urban extents at 1 sq. km resolution and need to have your population density information at the same spatial resolution. Here we can use the \proglang{R} function `aggregate()`. This function takes your original raster and aggregates the pixels into larger pixels using a specified mathematical function to aggregate the many values into 1 value per new, larger pixel. Type and execute `?raster::aggregate` in the interactive window for more function information.
 
 Let's aggregate the `pph` data into pixels that are actually 1 sq. km in resolution.
 
 ```{r, aggregate_1k}
-pph_1k <- aggregate(pph, fact=10, fun=mean, expand=T, na.rm=T)
+pph_1k <- aggregate(pph, fact = 10, fun = mean, expand = T, na.rm = TRUE)
 ```
 
 Visually compare the `pph` raster and the `pph_1k` raster by using the plot function.
@@ -209,7 +215,7 @@ plot(pph)
 plot(pph_1k)
 ```
 
-You should now have a data set with a spatial resolution/cell size of 1000m x 1000m (check the layer properties to ensure). What are the units of this new raster’s values though? Because we had `R` take the average or mean of the input data (`pph`), every pixel in the output dataset represents the average (notice the `fun = "mean"` parameter in the above code block) people per hectare of the input cells. If you desired people per sq. km at 1 sq. km resolution, then the conversion procedure would also need to be done either prior to aggregation.
+You should now have a data set with a spatial resolution/cell size of 1000m x 1000m (check the layer properties to ensure). What are the units of this new raster’s values though? Because we had \proglang{R} take the average or mean of the input data (`pph`), every pixel in the output dataset represents the average (notice the `fun = "mean"` parameter in the above code block) people per hectare of the input cells. If you desired people per sq. km at 1 sq. km resolution, then the conversion procedure would also need to be done either prior to aggregation.
 
 Note: Be aware of the modifiable areal unit problem (MAUP) when aggregating. See Openshaw (-@Openshaw1984) for more information.
 This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
@@ -228,7 +234,7 @@ rwa_lc_300 <- raster(paste0(root, "data/SectionI/rwa_lc_300_projected.tif"))
 
 Then type and execute the following to carry out the resample:
 ```{r, lc_resample}
-pph_300m <- resample(pph, rwa_lc_300, method="bilinear")
+pph_300m <- resample(pph, rwa_lc_300, method = "bilinear")
 ```
 
 Use the plot function to see how the results carried out.
@@ -244,9 +250,8 @@ So, we've seen how to do some manipulations with the pph-formatted data. But wha
 
 The key is the pixel area grid dataset that is provided with this dataset. The pixel area raster is a 0.0008333° resolution dataset whose pixel values represent the area of a given pixel in square meters. This means that if we have the spatially aligned ppp dataset, it becomes another simple algebra problem using raster math where:
 
-\[
-\text{population density in pixel }i = (\text{population count}_i)/(\text{pixel area}_i)
-\]
+$$\text{population density in pixel }i = (\text{population count}_i)/(\text{pixel area}_i)$$
+
 
 First we need to get a raster where each pixel contains the value of the its area in some squared linear units. Thankfully, the **`raster`** package already has a convenient function for this: `area()` (Although it is not suitable for _super precise_ applications; see `?area` for more details). The units the `area()` function return are in sq. km. So, let's load a ppp dataset for Rwanda (RWA) and calculate the pixel area (`px_area`):
 
@@ -255,11 +260,9 @@ ppp_rwa <- raster(paste0(root,"data/SectionI/ppp_prj_2002_RWA.tif"))
 px_area <- area(ppp_rwa)
 ```
 
-We could then get the population density per sq. km, in approx 100m x 100m pixels, by simply dividing the `ppp_rwa` by `px_area`. But, let's say we want to conver this `ppp` dataset to have density units of people per sq. mile (mi). For this we'd need a conversion factor of 1 sq. km to 0.386102 sq. mi. Equation wise it'd look like:
+We could then get the population density per sq. km, in approx 100m x 100m pixels, by simply dividing the `ppp_rwa` by `px_area`. But, let's say we want to convert this `ppp` dataset to have density units of people per sq. mile (mi). For this we'd need a conversion factor of 1 sq. km to 0.386102 sq. mi. For each pixel $i$ the equation for its value would look like:
 
-\[
-\text{ppmi} = \text{ppp_rwa}/\text{px_area}_{km^2} * (1 \text{ km}^2/0.386102\text{ mi}^2)
-\]
+$$\text{ppmi} = \frac{ppp\_rwa}{px\_area_{km^2}} * \frac{1\text{ km}^2}{0.386102\text{ mi}^2}$$
 
 We could then execute the following:
 
@@ -271,9 +274,357 @@ You should now have a population density layer, in WGS 1984 coordinate system st
 
 
 # "Intelligent" Dasymetric Redistirbution 
-##  What is Dasymetric Redistribution?
+## What is Dasymetric Redistribution?
+Dasymetric redistribution is the disaggregation of values from count data a larger _source area_ to a series of, smaller, _target areas_ that lie within the given source area based upon _ancillary data_. Ancillary data is information related to the phenomena, which is being disaggregated, and is used to inform, proportionally, which target units the counts being distributed should be assigned (@Mennis2003, @Mennis2006). The ancillary data must be at the same spatial resolution of the target areas and the disaggregated values assigned to the target areas should add back up to the original value of the source area they were distributed from (@Mennis2003, @Mennis2006). This is similar to the more simple procedure of areal reweighting (Figure \ref{fig:areal_fig}) which redistributes count values based upon the proportional relationships between the areas of the targets to the source.
 
+```{R areal_fig, echo = FALSE, fig.cap = "Example of areal reweighting. Adapted from Nieves et al. (2022) DOI: 10.13140/RG.2.2.24822.93763."}
+knitr::include_graphics(here::here("Figures","figure2.png"))
+```
+
+For instance, if we are disaggregating population counts from a county down to the admin units that make up the county, we could use land cover as an ancillary dataset, as shown in an example within Figure \ref{fig:dasy_fig}. This is because we know, or assume, things about the relationship between population counts and landcover, e.g. few to no people live in water (land cover class "200" in example), more people live in built land cover (land cover class "190" in example) than in agriculture landcover (land cover class "11" in example), and more people are likely to live in agriculture landcover than forest landcover (land cover class "40" in example) (@Mennis2003, @Mennis2006, @Nieves2019).
+
+```{R dasy_fig, echo = FALSE, fig.cap = "Example of dasymetric disaggregation, specifically an \"intelligent\" version where the weights were determined by a linear regression. Adapted from Nieves et al. (2022) DOI: 10.13140/RG.2.2.24822.93763."}
+knitr::include_graphics(here::here("Figures","figure3.png"))
+```
+
+How we go about communicating this relationship mathematically is by assigning weights to the different ancillary data. This can either be done by manually assigning weights based upon expertise or theoretical concepts (@Mennis2003), or so-called “intelligent” dasymetric mapping (@Mennis2006) where the weights are determined by some statistical function or model such as linear regression (Figure \ref{fig:dasy_fig}). It is important to note that these weights are used relative to each source area. So, if a target area has a given weight, we first normalize it, if the weights in the source area do not already add up to 1, relative to all the other target areas within its source area prior to multiplying the source area count by the weights to get the final disaggregated target area counts (Figure \ref{fig:dasy_fig}).
+
+We are going to examine a method of random forest-informed dasymetric modelling of gridded population data, put forth by Stevens *et al.* (-@Stevens2015) that uses a random forest regression, a regression tree-based machine learning method, to create the weights that inform the dasymetric redistribution of population count values from source areas (typically census-based enumeration units) to our target areas (approximately 100m resolution pixels).
 
 ##  What is a Random Forest?
 
+Random forests (RFs) are a non-parametric modelling method that creates an ensemble model by growing many independent decision trees through random covariate selection and a sampling with replacement method called bagging (@Breiman2001). As related to user input and parametrization, RFs do not require much, which is an attractive feature and allows it to be used on large datasets with varying attributes. A brief summary of strengths and weaknesses of RFs are presented in table \ref{tab:rf-tbl}:
+
+```{r rf-tbl, echo = FALSE, warning = FALSE, message = FALSE}
+options(knitr.kable.NA = '')
+tbl <- "|Strengths|Limits| \\n
+| --------------------- | ---------- | \\n
+|All-purpose model that performs well on most problems including those with non-linear relationships, many complex interactions of covariates, and collinearity|Covariate relationships to outcome of interest largely, but not wholly, uninterpretable since it is composed of hundreds of decision trees, i.e. considered a 'black box' method|| \\n
+|Handles noisy or missing data in addition to categorical and continuous data and is robust against over training|| \\n
+|Can be specified to only include the most important variables|| \\n
+|Can handle extremely large and extremely small datasets|| \\n
+|Can be used for either classification or regression|| \\n
+|Requires little to no manual tuning of parameters|| \\n
+|Scalable, i.e. can be parallelized for quicker performance|| \\n
+|Internal validation estimate|| \\n" 
+tbl_df <- data_frame <- read_delim(tbl, delim = '|', show_col_types = FALSE) %>%
+  select(`Strengths`, `Limits`)
+tbl_df <- tbl_df[c(2:nrow(tbl_df)),]
+knitr::kable(tbl_df, caption = "General strengths and limits of random forests", booktabs = TRUE) %>%
+  kable_classic(font_size = 10, full_width = FALSE, html_font = "Cambria") %>%
+  column_spec(1, width = "75mm") %>%
+  column_spec(2, width = "75mm")
+```
+
+While fully understanding a RF is not necessary to utilize this data correctly, those who wish to know more can read (@Breiman1996, @Breiman2001, @Liaw2003) and the document `Classifiers and Random Forests.pdf` in the `../docs/` folder. The important concept is that we use random forests to create the weighting layer used in our dasymetric redistribution of population count data by training it at the admin unit level using unit averages of covariates and population density and then predict population density per pixel based upon pixel level covariates.
+
 ##  Dasymetric Disaggregation with a Random Forest-informed Weighting Layer
+
+Here we will provide you with the weighting layer created by a RF and have you manually go through the process of disaggregating population count data from vector-based administrative units to ~100m pixels. Let’s start by adding our vector-based population data that is stored as a polygon shapefile. Execute the following:
+
+```{r, load_shapefile}
+pop_shp <- st_read(dsn = paste0(root,"data/SectionII/adminpop.shp"),
+                   layer = "adminpop",
+                   stringsAsFactors = FALSE)
+```
+
+Take a bit of time to explore the attribute table of the `pop_shp` object paying attention to the `ADMINID` and `ADMINPOP` fields. The `ADMINID` field is the unique ID of each source area and the `ADMINPOP` field is the total population count for each area. If we execute the `summary()` function and call the `head()` function on the `pop_shp` object:
+
+
+```{r, explore_shp}
+head(pop_shp)
+summary(pop_shp)
+```
+
+We can see the attribute table of the has been read in using the \pkg{sf} package essentially as a \proglang{R} `data.frame` class with attached spatial geometry data. This means anything you can do to an \proglang{R} `data.frame` you can use to manipulate and view the data of the `pop_shp` object. We can also see that there are six field columns here plus a column for the geometry, but we are mainly interested in ADMINID and ADMINPOP fields.Now we’ll add the prediction density layer by executing the following:
+
+```{r, add_prediction_weights}
+rf_weight_layer <- raster(paste0(root, 
+                                 "data/SectionII/",
+                                 "predict_density_rf_pred_prj_2002_RWA.tif"))
+```
+
+Get an idea of the what the weighting layer looks like by calling:
+
+```{r, plot_rf_weights}
+plot(rf_weight_layer)
+```
+
+Looking at the plot legend, it is quickly apparent that that the sum of pixel values within any given source area will be much higher than 1, meaning we are not meeting one of the requirements for dasymetric weights and indicating we will need to normalize the values somehow first. This is because the RF outputs values of predicted average population density, which can have values from zero to, theoretically, infinity. 
+
+Lets focus on normalising the weights relative to each unit. We can think of this in mathematical terms where for a given source area $i$ we divide every target pixel $j$ within that given source area by the sum of all pixels $j$ in the source area $i$. Or written as a function:
+
+$$\text{normalised weight}_{ij} = \frac{RF\_predicted\_value_{ij}}{\sum{RF\_predicted\_value_{ij}}}$$
+
+So, to get our normalised weighting layer we need to do two things: 1) find the sum of all pixel values within each source area of the `.shp` layer, and, 2) Divide all the pixel values of the `.tif` weighting raster by those sums. First, we’ll find the sum of weight values and create a raster of those sums that we can normalise by. So, we would normally create a raster of zones to carry out our sum procedure within by calling the `rasterize()` function from the raster package to put the ADMINID values into spatially coincident raster cells. However, the `rasterize()` function is relatively inefficient, so we will use the more efficient `fasterize()` function that can leverage some of the greater efficiencies of the \pkg{sf} package.
+
+```{r, fasterise_polygon}
+zone_ras <- fasterize(pop_shp,
+                      rf_weight_layer,
+                      field = "ADMINID",
+                      fun = "first",
+                      background = NA)
+
+```
+
+Go ahead and save the zonal raster to file with the following command:
+
+```{r, save_zonal}
+writeRaster(zone_ras,
+            filename = paste0(root,"data/SectionII/zonal_raster.tif"),
+            format = "GTiff",
+            overwrite = TRUE,
+            options = c("COMPRESS=LZW"))
+
+```
+
+We now have our raster where every pixel value indicates the unique ID of the source polygon area the pixel lies in. Now, let’s find the total sum of pixel level weights per admin unit. Type and execute the following to get the sum:
+
+```{r, weight_sum}
+weight_sum_table <- zonal(rf_weight_layer,
+                          zone_ras,
+                          fun = "sum",
+                          na.rm = TRUE)
+
+```
+
+This gives us a matrix that has one column for the unique ID of each zone and the corresponding sum of weights per zone in the second column. But this data is no longer spatial, so we need to get it back into a spatially explicit format again, specifically in a raster. So first, let’s convert the matrix to a `data.frame` and make the names line up for a join to the shapefile. Execute the following two lines one after the other:
+
+```{r, matrix_weight_sum_convert}
+weight_sum_table <- as.data.frame(weight_sum_table)
+names(weight_sum_table) <- c("ADMINID", "RFW_SUM")
+```
+
+We then join the data to the shapefile by the matching `ADMINID` value:
+
+```{r, join_weight_sum}
+pop_shp <- merge(pop_shp, weight_sum_table, by = "ADMINID")
+```
+
+Check that the values have been transferred to the shapefile by calling:
+
+```{r, check_weight_sum}
+head(pop_shp$RFW_SUM)
+```
+
+Now we’ll turn those weight sums into a raster using `fasterize()` again:
+
+```{r, make_weight_sum_raster}
+weight_sum_ras <- fasterize(pop_shp,
+                            rf_weight_layer,
+                            field = "RFW_SUM",
+                            fun = "first",
+                            background = NA)
+```
+
+Go ahead and plot the raster to see how it did.
+
+```{r, plot_weight_sum_raster}
+plot(weight_sum_ras)
+```
+
+Let’s normalise the weights; execute the following:
+
+```{r, normalise_weights}
+norm_weights <- rf_weight_layer / weight_sum_ras
+```
+
+Now that we have our normalised weights in raster format we can focus on disaggregating our population count data from the `adminpop.shp` data. However, we will need to convert the population data from vector to raster and make sure we have it aligned with our normalised weighting raster, again using `fasterize()`.
+
+```{r, make_raw_pop_raster}
+pop_sum_ras <- fasterize(pop_shp,
+                         rf_weight_layer,
+                         field = "ADMINPOP",
+                         fun = "first",
+                         background = NA)
+```
+
+Give this raster a plot to see how coarse the population data is relative to what we are about to do.
+
+```{r, plot_raw_pop_raster}
+plot(pop_sum_ras)
+```
+
+At last, we can disaggregate the population using the normalised weights. Execute the following:
+```{r, disaggregate_pop}
+rf_disaggregation <- norm_weights*pop_sum_ras
+```
+
+Now plot this raster to compare to the raster of the admin unit sums!
+
+```{r, plot_disagg_pop_ras}
+plot(rf_disaggregation)
+```
+
+We can now perform one more check to ensure that everything went correctly. Dasymetric redistributions should ideally be “volume preserving”, meaning that all the values of the target areas should add back up to the source area they were disaggregated from. Let's add up the values using the `zonal()` function again and subtract the disaggregated sums from the admin unit values.
+
+```{r, pop_check}
+pop_check <- zonal(rf_disaggregation,
+                   zone_ras,
+                   fun = "sum", 
+                   na.rm = TRUE)
+pop_difference_vector <- pop_shp$ADMINPOP - pop_check[,2]
+```
+
+Now we can see what the difference is (if any) between the sum of our modelled values and the original source values:
+
+```{r, summary_pop_diff}
+summary(pop_difference_vector)
+```
+
+## Creating Your Own Dasymetric Weighting Layer
+
+Let’s manually create a dasymetric weighting layer and see how this impacts the disaggregation. First load the `rwa_lc.tif` and view it by executing:
+
+```{r, load_lc_2}
+lc_ras <- raster(paste0(root,"data/SectionII/rwa_lc.tif"))
+plot(lc_ras)
+```
+
+This raster is a thematic land cover dataset where every integer value represents one of the described land cover classes in the table below (Table \ref{tab:lc-tbl}). There are more classes possible in this dataset, but we only include the ones seen in Rwanda for conciseness.
+
+```{r lc-weight-tbl, echo = FALSE, warning = FALSE, message = FALSE}
+options(knitr.kable.NA = '')
+tbl <- "|Class Number|Land Cover Description| \\n
+| --------------------- | ---------- | \\n
+|11|Cultivated and Managed Lands| \\n
+|40|Natural and Semi-Natural Vegetation: Woody/Trees| \\n
+|130|Natural and Semi-Natural Vegetation: Shrubs| \\n
+|140|Natural and Semi-Natural Vegetation: Herbaceous/Grassy| \\n
+|160|Natural and Semi-Natural Vegetation: Aquatic| \\n
+|190|Built Areas: Urban| \\n
+|200|Bare Areas| \\n
+|210|Water| \\n
+|240|Built Areas: Rural| \\n" 
+tbl_df <- data_frame <- read_delim(tbl, delim = '|', show_col_types = FALSE) %>%
+  select(`Class Number`, `Land Cover Description`)
+tbl_df <- tbl_df[c(2:nrow(tbl_df)),]
+knitr::kable(tbl_df, caption = "ESA CCI Land Cover classes and descriptions", booktabs = TRUE) %>%
+  kable_classic(font_size = 10, full_width = FALSE, html_font = "Cambria") %>%
+  column_spec(1, width = "15mm") %>%
+  column_spec(2, width = "75mm")
+```
+
+To turn this into a weighting layer, we first need to convert the land cover class values into weights. The catch is, with the `reclass()` function, we can only convert from one integer value to another integer value, so keep this in mind when selecting weights.
+
+Using the table below to record your choices, assign weighting values at your discretion based upon your beliefs of how population distribution is related to land cover classes. But remember that these values should have relative meaning amongst themselves. For instance, you may have reason to believe that water land cover (class 200) has zero population so you would want to give it a weight of “0”. You also may believe that people are five times as likely to live in built land cover (class 190) as compared to cultivated land cover (class 11) and twice as likely to live in cultivated land cover (class 11) as they are to live in forested land cover (class 40). Understanding that the lowest non-zero weight you can assign is “1”, you could then assign weights of 10, 2, and 1 to built, cultivated, and forest land cover, respectively.
+
+```{r lc-weight-tbl_apriori, echo = FALSE, warning = FALSE, message = FALSE}
+options(knitr.kable.NA = '')
+tbl <- "|Class Number|Land Cover Description|Assigned Weight| \\n
+| --------------------- | ---------- |----------------------| \\n
+|11|Cultivated and Managed Lands| | \\n
+|40|Natural and Semi-Natural Vegetation: Woody/Trees| | \\n
+|130|Natural and Semi-Natural Vegetation: Shrubs| | \\n
+|140|Natural and Semi-Natural Vegetation: Herbaceous/Grassy| | \\n
+|160|Natural and Semi-Natural Vegetation: Aquatic| | \\n
+|190|Built Areas: Urban| | \\n
+|200|Bare Areas| | \\n
+|210|Water| | \\n
+|240|Built Areas: Rural| | \\n" 
+tbl_df <- data_frame <- read_delim(tbl, delim = '|', show_col_types = FALSE) %>%
+  select(`Class Number`, `Land Cover Description`, `Assigned Weight`)
+tbl_df <- tbl_df[c(2:nrow(tbl_df)),]
+knitr::kable(tbl_df, caption = "ESA CCI Land Cover classes, descriptions, and user assigned weights", booktabs = TRUE) %>%
+  kable_classic(font_size = 10, full_width = FALSE, html_font = "Cambria") %>%
+  column_spec(1, width = "15mm") %>%
+  column_spec(2, width = "75mm") %>%
+  column_spec(3, width = "25mm")
+```
+
+Now that you have decided the weights you desire to use, we are going to create our initial weighting layer. We need to first create our reclassification matrix. A reclassification matrix has three columns: 1) the “from” column, 2) the “to” column and, 3), the “becomes” column. The first two columns define the class number you want to designate, and the third column indicates the value you want that range of values to become. I’ve filled in the first two columns of values in the code below and now you just need to fill in your selected weight values for the third column, where every `x` I’ve placed should be replaced with your chosen weight. Class numbers in the code are in the same order as the above table (Table \ref{tab:rf_weight-tbl}. NOTE: The sum of your weights should add to $1.0$!
+
+```{r, reclassification_matrix}
+rcl_mat <- matrix(data = c(c(9,39,129,139,159,189,199,209,239),
+                           c(12,41,131,141,161,191,201,211,241),
+                           c(x,x,x,x,x,x,x,x,x)),
+                  ncol = 3)
+
+```
+
+Now we can reclassify to get our weights raster by running the following:
+
+```{r, reclassify_lc}
+lc_weight_ras <- reclassify(lc_ras,
+                            rcl_mat,
+                            filename = paste0(root,
+                                              "output/SectionII/rwa_lc_manual_weights.tif"),
+                            overwrite = TRUE)
+
+```
+
+Like with the RF-based weighting layer, we now need to normalise this weighting layer by getting the sum of weights per admin unit, converting that to a raster, and then dividing by the sum. Type and execute the following to get the sum of weights:
+
+```{r, weight_sum_2}
+weight_sum_table <- zonal(lc_weight_ras,
+                          zone_ras,
+                          fun = "sum",
+                          na.rm = TRUE)
+```
+
+First, let’s convert the matrix to a `data.frame` and make the names line up for a join to the shapefile. Execute the following two lines one after the other:
+
+```{r, sum_table_to_df}
+weight_sum_table <- as.data.frame(weight_sum_table)
+names(weight_sum_table) <- c("ADMINID","LCW_SUM")
+```
+
+We then join the data to the shapefile by the matching `ADMINID` value.
+
+```{r, join_pop_weights}
+pop_shp <- merge(pop_shp, weight_sum_table, by = "ADMINID")
+```
+
+Check that the values have been transferred to the shapefile by calling:
+
+```{r, check_pop_weight_sum}
+head(pop_shp$LCW_SUM)
+```
+
+Now we’ll turn those weight sums into a raster using `fasterize()` again.
+
+```{r, rasterise_weight_sum}
+weight_sum_ras <- fasterize(pop_shp,
+                            lc_weight_ras,
+                            field = "LCW_SUM",
+                            fun = "first",
+                            background = NA)
+```
+
+Normalise our landcover based weights:
+
+```{r, normalise_weights_2}
+lc_norm_weights <- lc_weight_ras / weight_sum_ras
+```
+
+We need to go ahead and create another raster representation of the admin unit level population count to make sure it lines up with our weighting layer.
+
+```{r, rasterise_raw_pop_2}
+pop_sum_ras <- fasterize(pop_shp,
+                         weight_sum_ras,
+                         field = "ADMINPOP",
+                         fun = "first",
+                         background = NA)
+```
+
+We can now move to the final step of multiplying our population count raster by the weights.
+
+```{r, disaggregate_pop_2}
+lc_disagg <- lc_norm_weights * pop_sum_ras
+plot(lcdisagg)
+```
+
+Take a minute to plot and explore your dasymetrically redistributed population surface! Or save the `lc_disagg` object to a file (using the earlier `writeRaster` command) and open it up Arcmap/QGIS for an interactive exploration. If you desire, you can perform the aggregation check to make sure your population count sums up properly. Additionally, you can take the `RWA_ppp_manual_2002.tif` and `RWA_ppp_LC_manual_2002.tif` and subtract them using Raster Calculator type operations to examine how each disaggregation distributed the population counts differently.
+
+# Further Steps
+
+Now that you have the basics of how to create and post-process these types of data, try exploring other implementations of dasymetric disaggregation. Some things to possibly explore:
+
+- Utilise another statistical modelling method to create the dasymetric weights, e.g. artificial neural network using the \pkg{ann} package or multiple regression using the \pkg{glm} package
+- Find some census-based data at two different spatial resolutions, e.g. census tracts (admin. level 3), block groups (admin. level 4), and blocks (admin. level 5) from the US census Bureau. Model gridded population by creating your weights using the coarser data (e.g. admin level 3 and 4) and then use the boundaries and counts of the spatially finest data (admin level 5) to compare the errors that get introduced by modelling with different coarsenesses of input data. Note: good error measures for this are the mean absolute error (MAE) and the root mean square error (RMSE), but it is better to calculate them using population density rather than counts as the former adjusts for the area of each admin unit. See Stevens *et al.* (-@Stevens2019) for more details of looking at the errors of modelled population.
+- Explore the \pkg{popRF} package vignette to see how you can quickly and easily construct your own random forest-informed gridded population datasets with an open online geospatial data library as well as your own input data
+
+
+
+
+# References
