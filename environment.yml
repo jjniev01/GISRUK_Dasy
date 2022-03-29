@@ -1,0 +1,9 @@
+name: gisruk_dasy
+channels:
+  - conda-forge
+dependencies:
+  - python
+  - geopandas
+  - rioxarray
+  - seaborn
+  - geocube
